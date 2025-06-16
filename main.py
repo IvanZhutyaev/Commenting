@@ -92,54 +92,26 @@ async def process_stories():
                         print(f"Достигнут лимит в {MAX_MESSAGES} сообщений. Завершаем обработку.")
                         return
 
-                    if user.stories_unavailable or user.stories_hidden:
-                        continue
-                    if user.stories_max_id:
-                        async with semaphore:  # Ограничение одновременных запросов
-                            try:
-                                print(f'Идентификатор пользователя: {user.id}')
+                    async with semaphore:  # Ограничение одновременных запросов
+                        try:
+                            print(f'Идентификатор пользователя: {user.id}')
+                            
+                            # Отправляем комментарий пользователю
+                            message_sent = await send_comment(user.id)
+                            if not message_sent:
+                                continue
 
-                                if hasattr(user, 'stories_max_id') and isinstance(user.stories_max_id, int):
-                                    max_id_value = user.stories_max_id
-                                    print(f'Значение max_id для пользователя {user.id}: {max_id_value}')
-                                else:
-                                    print(f'Пользователь {user.id} не имеет параметра stories_max_id или он некорректен.')
-                                    max_id_value = None
+                            # Генерируем случайную задержку
+                            delay = random.randint(MIN_DELAY, MAX_DELAY)
+                            print(f"Ожидание {delay} секунд перед следующим пользователем...")
+                            await asyncio.sleep(delay)
 
-                                if max_id_value and max_id_value > 0:
-                                    stories = await client(functions.stories.ReadStoriesRequest(
-                                        peer=user,
-                                        max_id=max_id_value
-                                    ))
-                                    stats_logger.log_story_view(user.id, True)
-                                    print(f"Прочитана история: {user.id}")
-                                else:
-                                    stories = await client(functions.stories.ReadStoriesRequest(
-                                        peer=user
-                                    ))
-                                    stats_logger.log_story_view(user.id, True)
-                                    print(f"Прочитана история: {user.id}")
-
-                                print(f'Объект stories: {stories}')
-
-                                # Отправляем комментарий после просмотра сторис
-                                message_sent = await send_comment(user.id)
-                                if not message_sent:
-                                    continue
-
-                                # Генерируем случайную задержку
-                                delay = random.randint(MIN_DELAY, MAX_DELAY)
-                                print(f"Ожидание {delay} секунд перед следующей сторис...")
-                                await asyncio.sleep(delay)
-
-                            except FloodWaitError as e:
-                                wait_time = e.seconds
-                                print(f"Достигнут лимит запросов. Ожидание {wait_time} секунд...")
-                                await asyncio.sleep(wait_time)
-                                stats_logger.log_story_view(user.id, False, f"FloodWait: {wait_time} секунд")
-                            except Exception as e:
-                                stats_logger.log_story_view(user.id, False, str(e))
-                                print(f'Ошибка при просмотре историй пользователя {user.id}: {e}')
+                        except FloodWaitError as e:
+                            wait_time = e.seconds
+                            print(f"Достигнут лимит запросов. Ожидание {wait_time} секунд...")
+                            await asyncio.sleep(wait_time)
+                        except Exception as e:
+                            print(f'Ошибка при обработке пользователя {user.id}: {e}')
             except ChatAdminRequiredError:
                 print(f'Недостаточно прав для получения участников из: {dialog.title}. Пропуск...')
             except Exception as e:
